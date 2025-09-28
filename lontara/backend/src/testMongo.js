@@ -2,19 +2,17 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  // Insert user dummy
-  const newUser = await prisma.authUser.create({
+  const newUser = await prisma.user.create({
     data: {
-      username: "dummyuser",
-      email: "dummy@example.com",
-      passwordHash: "hashedpassword123", // nanti seharusnya hasil bcrypt
-      role: "ADMIN"
+      email: "mongo@example.com",
+      googleId: "987654321",
+      name: "Mongo User",
+      role: "TU"
     }
   });
   console.log("Inserted user:", newUser);
 
-  // Ambil semua user
-  const allUsers = await prisma.authUser.findMany();
+  const allUsers = await prisma.user.findMany();
   console.log("All users:", allUsers);
 }
 
