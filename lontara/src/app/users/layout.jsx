@@ -2,6 +2,6 @@
 
 import AppLayout from "../components/AppLayout";
 
-export default function DashboardLayout({ children }) {
+export default function UsersLayout({ children }) {
   return <AppLayout>{children}</AppLayout>;
 }
