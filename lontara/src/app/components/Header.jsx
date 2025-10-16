@@ -16,14 +16,14 @@ export default function Header({ onMenuClick }) {
           >
             <Menu className="w-5 h-5 text-gray-600" />
           </button>
-          
+{/*           
           <Image
             src="/logo_lontara.svg"
             width={180}
             height={45}
             alt="Lontara Logo"
             className="h-6 sm:h-8 w-auto"
-          />
+          /> */}
         </div>
 
         {/* User Section */}

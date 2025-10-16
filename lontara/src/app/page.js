@@ -25,7 +25,7 @@ export default function Home() {
           height={300}
           alt="Lontara Logo"
         />
-        <p className="text-xl">Arsip Cerdas, Waktu Lebih Hemat</p>
+        <p className=" text-2xl text-black">Arsip Cerdas, Waktu Lebih Hemat</p>
         <Button onClick={handleButtonClick}>Login</Button>
       </div>
     </div>
