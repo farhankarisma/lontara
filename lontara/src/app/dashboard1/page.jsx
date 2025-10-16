@@ -6,6 +6,7 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
 import { PieChart } from "@mui/x-charts/PieChart";
+import RecentMails from "../components/Main-Dashboard/recent-mails";
 
 const mailData = [
   {
@@ -62,7 +63,7 @@ function PieCard({ title, total, data }) {
 
 export default function Dashboard() {
   return (
-    <div className="p-10 min-h-screen">
+    <div className="p-10 min-h-screen bg-white">
       {/* Welcome Section */}
       <div className="flex mb-8 justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Mail Overview</h1>
@@ -114,10 +115,13 @@ export default function Dashboard() {
          {" "}
       <div className="flex mb-8 mt-8 justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Recent Mails</h1>
-        <Link href="/incoming-mail" className="text-md text-black/50">See All</Link>
-      </div>
 
-      
+        <Link href="/incoming-mail" className="text-md text-black/50">
+          See All
+        </Link>
+      </div>
+      <h1 className="text-xl font-light  text-gray-800 ml-3 mb-5">Today</h1>
+      <RecentMails className="ml-3"/>
     </div>
   );
 }
