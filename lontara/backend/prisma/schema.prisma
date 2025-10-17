@@ -13,15 +13,15 @@ model AuthUser {
   email        String?    @unique
   passwordHash String
   role         String   @default("STAFF") // ADMIN / STAFF
-  googleAuth   UserGoogleAuth?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  
+  mustChangePassword Boolean @default(true)
 }
 
-model UserGoogleAuth {
+model AdminGoogle {
   id               String   @id @default(auto()) @map("_id") @db.ObjectId
   authUserId       String   @unique @db.ObjectId
-  user             AuthUser @relation(fields: [authUserId], references: [id])
   googleEmail      String?
   googleId         String?
   encryptedRefresh String?

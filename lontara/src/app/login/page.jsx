@@ -11,24 +11,24 @@ import React, { useState, useEffect } from "react";
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ username: "", password: "" });
-  const [loginType, setLoginType] = useState("user"); // "user" or "admin"
+  const [loginType, setLoginType] = useState("user"); 
   const [error, setError] = useState("");
-  
+
   const { login, loading, isAuthenticated, error: authError } = useAuth();
   const router = useRouter();
 
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/dashboard");
+      router.push("/dashboard1");
     }
   }, [isAuthenticated, router]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
     // Clear error when user starts typing
     if (error) setError("");
@@ -38,27 +38,14 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    // Validation
     if (!formData.username || !formData.password) {
-      setError("Username dan password harus diisi");
+      setError("Username and password are required.");
       return;
     }
 
-    try {
-      const result = await login(formData, loginType === "admin");
-      
-      if (result.success) {
-        // Redirect based on user type
-        if (loginType === "admin") {
-          router.push("/admin/dashboard");
-        } else {
-          router.push("/dashboard");
-        }
-      } else {
-        setError(result.error || "Login gagal");
-      }
-    } catch (err) {
-      setError(err.message || "Terjadi kesalahan saat login");
+    const result = await login(formData);
+    if (!result.success) {
+      setError(result.error || "Login failed. Please check your credentials.");
     }
   };
 
@@ -74,7 +61,7 @@ export default function LoginPage() {
           height={300}
           alt="Lontara Logo"
         />
-        
+
         {/* Login Type Selector */}
         <div className="flex bg-gray-100 rounded-lg p-1 mb-4">
           <button
@@ -126,7 +113,7 @@ export default function LoginPage() {
               required
             />
           </div>
-          
+
           <div className="relative mb-4">
             <Lock
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -149,18 +136,18 @@ export default function LoginPage() {
               {showPassword ? "🙈" : "👁️"}
             </span>
           </div>
-          
+
           <div className="flex justify-end mb-4">
-            <Link 
-              href="/forgot-password" 
+            <Link
+              href="/forgot-password"
               className="text-sm text-blue-500 hover:text-blue-300 transition"
             >
               Forgot Password?
             </Link>
           </div>
 
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             className="mt-4 flex items-center justify-center gap-2"
             disabled={loading}
           >
@@ -174,21 +161,6 @@ export default function LoginPage() {
             )}
           </Button>
         </form>
-
-        {/* Email Verification Link */}
-        {loginType === "user" && (
-          <div className="mt-4 text-center">
-            <p className="text-sm text-gray-600">
-              Belum verifikasi email?{" "}
-              <Link 
-                href="/verify-email" 
-                className="text-blue-500 hover:text-blue-300 transition"
-              >
-                Klik di sini
-              </Link>
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

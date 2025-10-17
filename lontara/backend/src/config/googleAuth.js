@@ -10,7 +10,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/userinfo.profile"
+  "https://www.googleapis.com/auth/userinfo.profile",
 ];
 
 function getAuthUrl(state) {
@@ -18,7 +18,7 @@ function getAuthUrl(state) {
     access_type: "offline",
     prompt: "consent",
     scope: SCOPES,
-    state // <== nanti diisi JWT yang nunjukin admin ID
+    state, // <== nanti diisi JWT yang nunjukin admin ID
   });
 }
 

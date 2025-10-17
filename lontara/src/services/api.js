@@ -1,29 +1,24 @@
-// API service untuk komunikasi dengan backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
   }
 
-  // Helper method untuk HTTP requests
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     const config = {
-      headers: {
-        'Content-Type': 'application/json',
+      header: {
+        "Content-Type": "application/json",
         ...options.headers,
       },
       ...options,
     };
 
-    // Add auth token if available
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     try {
@@ -31,73 +26,46 @@ class ApiService {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || data.message || 'Something went wrong');
+        throw new Error(data.message || `HTTP ${response.status}`);
       }
 
-      return data;
+      return {
+        success: true,
+        data: data,
+        status: response.status,
+      };
     } catch (error) {
-      console.error('API Request Error:', error);
-      throw error;
+      return {
+        success: false,
+        error: error.message,
+        status: error.status || 500,
+      };
     }
   }
 
-  // Auth methods
-  async login(credentials) {
-    return this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials),
+  async get(endpoint, options = {}) {
+    return this.request(endpoint, { method: "GET", ...options });
+  }
+
+  async post(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      method: "POST",
+      body: JSON.stringify(data),
+      ...options,
     });
   }
 
-  async adminLogin(credentials) {
-    return this.request('/admin/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials),
+  async put(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      method: "PUT",
+      body: JSON.stringify(data),
+      ...options,
     });
   }
 
-  async verifyEmail(token) {
-    return this.request(`/auth/verify-email?token=${token}`, {
-      method: 'GET',
-    });
-  }
-
-  // Admin methods
-  async createUser(userData, adminToken) {
-    return this.request('/admin/create-user', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-      },
-      body: JSON.stringify(userData),
-    });
-  }
-
-  async getUsers(adminToken) {
-    return this.request('/admin/users', {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-      },
-    });
-  }
-
-  async resendVerification(userId, adminToken) {
-    return this.request('/admin/resend-verification', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-      },
-      body: JSON.stringify({ userId }),
-    });
-  }
-
-  // Test connection
-  async healthCheck() {
-    return this.request('/health', { method: 'GET' });
+  async delete(endpoint, options = {}) {
+    return this.request(endpoint, { method: "DELETE", ...options });
   }
 }
 
-// Export singleton instance
-const apiService = new ApiService();
-export default apiService;
+export default new ApiService();

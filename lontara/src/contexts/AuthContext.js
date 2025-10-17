@@ -1,158 +1,94 @@
 "use client";
 
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import apiService from '../services/api';
+import React, { createContext, useState, useContext, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 
-// Auth states
-const authReducer = (state, action) => {
-  switch (action.type) {
-    case 'LOGIN_START':
-      return {
-        ...state,
-        loading: true,
-        error: null,
-      };
-    case 'LOGIN_SUCCESS':
-      return {
-        ...state,
-        loading: false,
-        isAuthenticated: true,
-        user: action.payload.user,
-        token: action.payload.token,
-        error: null,
-      };
-    case 'LOGIN_ERROR':
-      return {
-        ...state,
-        loading: false,
-        error: action.payload,
-        isAuthenticated: false,
-      };
-    case 'LOGOUT':
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        token: null,
-        error: null,
-      };
-    case 'SET_USER':
-      return {
-        ...state,
-        user: action.payload,
-        isAuthenticated: true,
-      };
-    default:
-      return state;
+const apiClient = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api",
+});
+
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("authToken");
+    if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-};
+);
 
-const initialState = {
-  isAuthenticated: false,
-  user: null,
-  token: null,
-  loading: false,
-  error: null,
-};
-
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const router = useRouter();
 
-  // Load user from localStorage on app start
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    const user = localStorage.getItem('auth_user');
-    
-    if (token && user) {
-      try {
-        dispatch({
-          type: 'LOGIN_SUCCESS',
-          payload: {
-            token,
-            user: JSON.parse(user),
-          },
-        });
-      } catch (error) {
-        console.error('Error parsing stored user data:', error);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
+    const checkUserSession = async () => {
+      const token = localStorage.getItem("authToken");
+      if (token) {
+        try {
+          const response = await apiClient.get("/auth/me");
+          setUser(response.data);
+        } catch (err) {
+          localStorage.removeItem("authToken");
+        }
       }
-    }
+      setLoading(false);
+    };
+    checkUserSession();
   }, []);
 
-  // Login function
-  const login = async (credentials, isAdmin = false) => {
-    dispatch({ type: 'LOGIN_START' });
-
+  const login = async (credentials) => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = isAdmin 
-        ? await apiService.adminLogin(credentials)
-        : await apiService.login(credentials);
+      const response = await apiClient.post("/auth/login", credentials);
+      const { token, user: userData } = response.data;
 
-      if (response.success) {
-        const { token, user, admin } = response.data;
-        const userData = user || admin;
+      localStorage.setItem("authToken", token);
+      setUser(userData);
 
-        // Store in localStorage
-        localStorage.setItem('auth_token', token);
-        localStorage.setItem('auth_user', JSON.stringify(userData));
-        localStorage.setItem('user_type', isAdmin ? 'admin' : 'user');
-
-        dispatch({
-          type: 'LOGIN_SUCCESS',
-          payload: { token, user: userData },
-        });
-
-        return { success: true, user: userData };
-      }
-    } catch (error) {
-      dispatch({
-        type: 'LOGIN_ERROR',
-        payload: error.message,
-      });
-      return { success: false, error: error.message };
+      return { success: true, user: userData };
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.message || "An unexpected error occurred.";
+      setError(errorMessage);
+      console.error("Login Failed:", err);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Logout function
   const logout = () => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('user_type');
-    dispatch({ type: 'LOGOUT' });
+    setUser(null);
+    localStorage.removeItem("authToken");
+    router.push("/login");
   };
 
-  // Check if user is admin
-  const isAdmin = () => {
-    return state.user?.role === 'ADMIN' || localStorage.getItem('user_type') === 'admin';
-  };
-
-  // Get auth token
-  const getToken = () => {
-    return state.token || localStorage.getItem('auth_token');
-  };
-
-  const value = {
-    ...state,
+  const authContextValue = {
+    user,
+    loading,
+    error,
+    isAuthenticated: !!user,
     login,
     logout,
-    isAdmin,
-    getToken,
   };
 
   return (
-    <AuthContext.Provider value={value}>
-      {children}
+    <AuthContext.Provider value={authContextValue}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return useContext(AuthContext);
 };
