@@ -7,6 +7,7 @@ const { authMiddleware } = require("../middlewares/auth");
 const router = express.Router();
 
 router.post("/login", async (req, res) => {
+  console.log("LOGIN ROUTE HIT", req.body);
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ message: "Missing username or password" });
@@ -19,7 +20,7 @@ router.post("/login", async (req, res) => {
   if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
   const token = jwt.sign(
-    { sub: user.id, username: user.username, role: user.role },
+    { id: user.id, username: user.username, role: user.role },
     process.env.JWT_SECRET || "secret",
     { expiresIn: "8h" }
   );

@@ -10,13 +10,14 @@ datasource db {
 model AuthUser {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   username     String   @unique
-  email        String?    @unique
+  email        String?  @unique
   passwordHash String
-  role         String   @default("STAFF") // ADMIN / STAFF
+  role         String   @default("STAFF")
+  mustChangePassword Boolean @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  
-  mustChangePassword Boolean @default(true)
+  // RELASI USER KE GOOGLE ACCOUNT
+  googleAccount AdminGoogle?
 }
 
 model AdminGoogle {
@@ -24,9 +25,28 @@ model AdminGoogle {
   authUserId       String   @unique @db.ObjectId
   googleEmail      String?
   googleId         String?
-  encryptedRefresh String?
+  encryptedRefresh String?   // Refresh Token
   connectedAt      DateTime?
   lastUsedAt       DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  authUser         AuthUser @relation(fields: [authUserId], references: [id])
+}
+
+model Mail {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  type         String   @default("INCOMING")
+  subject      String
+  sender       String
+  receiver     String
+  body         String?
+  date         DateTime
+  status       String   @default("NEW") // NEW, READ, ARCHIVED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([date])
+  @@index([sender])
+  @@index([subject])
 }
