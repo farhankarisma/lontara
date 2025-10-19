@@ -63,10 +63,10 @@ function PieCard({ title, total, data }) {
 
 export default function Dashboard() {
   return (
-    <div className="p-10 min-h-screen bg-white">
+    <div className="p-6 min-h-screen bg-white">
       {/* Welcome Section */}
       <div className="flex mb-8 justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Mail Overview</h1>
+        <h1 className="text-3xl font-medium text-gray-800">Mail Overview</h1>
         <Link
           href="#"
           className="text-white text-sm bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg shadow-md font-semibold transition-colors"
@@ -114,13 +114,13 @@ export default function Dashboard() {
       </div>
          {" "}
       <div className="flex mb-8 mt-8 justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Recent Mails</h1>
+        <h1 className="text-3xl font-medium text-gray-800">Recent Mails</h1>
 
         <Link href="/incoming-mail" className="text-md text-black/50">
           See All
         </Link>
       </div>
-      <h1 className="text-xl font-light  text-gray-800 ml-3 mb-5">Today</h1>
+      <h1 className="text-xl   text-gray-800 ml-3 mb-5">Today</h1>
       <RecentMails className="ml-3"/>
     </div>
   );

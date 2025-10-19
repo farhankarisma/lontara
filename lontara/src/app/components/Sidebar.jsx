@@ -9,7 +9,7 @@ import {
   User,
   LogOut,
   Send,
-  LayoutDashboard
+  LayoutDashboard,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -20,7 +20,7 @@ const menuItems = [
   {
     name: "Dashboard",
     icon: LayoutDashboard,
-    href: "/dashboard1",
+    href: "/main-dashboard",
   },
 ];
 
@@ -111,14 +111,7 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
 
         <div className="p-6 pb-24">
-          <Image
-            src="/logo_lontara.svg"
-            width={125}
-            height={200}
-            className="mb-10"
-          />
-
-          <h2 className="hidden lg:block text font-light text-gray-800 mb-6">
+          <h2 className="hidden lg:block text-xs text-gray-800 mb-6">
             Dashboard
           </h2>
 
@@ -132,20 +125,20 @@ export default function Sidebar({ isOpen, onClose }) {
                   key={item.name}
                   href={item.href}
                   onClick={handleLinkClick}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`flex items-center space-x-3 px-4 py-3 text-sm rounded-lg transition-colors ${
                     isActive
-                      ? "bg-blue-50 text-blue-700 border-r-4 border-blue-700"
+                      ? "bg-blue-500 text-white/90"
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
                   <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.name}</span>
+                  <span className="font-light">{item.name}</span>
                 </Link>
               );
             })}
           </nav>
 
-          <h2 className="hidden lg:block  font-light text-gray-800 mb-4 mt-8">
+          <h2 className="hidden lg:block  text-xs text-gray-800 mb-4 mt-8">
             Mail Management
           </h2>
 
@@ -159,9 +152,9 @@ export default function Sidebar({ isOpen, onClose }) {
                   key={item.name}
                   href={item.href}
                   onClick={handleLinkClick}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`flex items-center space-x-3 px-4 py-3 text-sm rounded-lg transition-colors ${
                     isActive
-                      ? "bg-blue-50 text-blue-700 border-r-4 border-blue-700"
+                      ? "bg-blue-500 text-white/90"
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
@@ -172,7 +165,7 @@ export default function Sidebar({ isOpen, onClose }) {
             })}
           </nav>
 
-          <h2 className="hidden lg:block  font-light text-gray-800 mb-4 mt-8">
+          <h2 className="hidden lg:block text-gray-800 text-xs mb-4 mt-8">
             Settings
           </h2>
 
@@ -186,9 +179,9 @@ export default function Sidebar({ isOpen, onClose }) {
                   key={item.name}
                   href={item.href}
                   onClick={handleLinkClick}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`flex items-center space-x-3 px-4 py-3 text-sm rounded-lg transition-colors ${
                     isActive
-                      ? "bg-blue-50 text-blue-700 border-r-4 border-blue-700"
+                      ? "bg-blue-500 text-white/90"
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >

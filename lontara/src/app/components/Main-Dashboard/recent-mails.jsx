@@ -93,7 +93,7 @@ export default function RecentMails(className = "") {
               className="w-4 h-4 text-blue-500 rounded border-gray-300"
             />
             <div>
-              <h3 className="font-medium text-gray-800">{mail.subject}</h3>
+              <h3 className="font-bold text-gray-800">{mail.subject}</h3>
               <p className="text-sm text-gray-400">{mail.senderName}</p>
             </div>
           </div>

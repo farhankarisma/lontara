@@ -16,19 +16,18 @@ export default function AppLayout({ children }) {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex-col h-screen bg-gray-50">
       {/* Sidebar - Single component that handles both desktop and mobile */}
-      <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
-      
+
+      <Header onMenuClick={toggleSidebar} />
+
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
+      <div className="flex-1 flex overflow-hidden lg:ml-0">
         {/* Header */}
-        <Header onMenuClick={toggleSidebar} />
-        
+
+        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { User, Lock, AlertCircle, Loader2 } from "lucide-react";
 import Button from "../components/ui/button";
 import { useAuth } from "../../contexts/AuthContext";
@@ -17,10 +16,9 @@ export default function LoginPage() {
   const { login, loading, isAuthenticated, error: authError } = useAuth();
   const router = useRouter();
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/dashboard1");
+      router.push("/main-dashboard");
     }
   }, [isAuthenticated, router]);
 
@@ -30,7 +28,6 @@ export default function LoginPage() {
       ...prev,
       [name]: value,
     }));
-    // Clear error when user starts typing
     if (error) setError("");
   };
 
@@ -108,7 +105,7 @@ export default function LoginPage() {
               value={formData.username}
               onChange={handleInputChange}
               placeholder="Username"
-              className="pl-10 w-full border-b rounded-lg px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
+              className="pl-10 w-full border-b rounded-lg px-3 py-2 text-black/60 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
               disabled={loading}
               required
             />
@@ -125,7 +122,7 @@ export default function LoginPage() {
               value={formData.password}
               onChange={handleInputChange}
               placeholder="Password"
-              className="pl-10 w-full border-b rounded-lg px-3 py-2 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
+              className="pl-10 w-full border-b rounded-lg px-3 py-2 text-black/60 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
               disabled={loading}
               required
             />
@@ -135,15 +132,6 @@ export default function LoginPage() {
             >
               {showPassword ? "🙈" : "👁️"}
             </span>
-          </div>
-
-          <div className="flex justify-end mb-4">
-            <Link
-              href="/forgot-password"
-              className="text-sm text-blue-500 hover:text-blue-300 transition"
-            >
-              Forgot Password?
-            </Link>
           </div>
 
           <Button
