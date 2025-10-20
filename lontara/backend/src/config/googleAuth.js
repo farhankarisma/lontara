@@ -13,13 +13,13 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
 ];
 
-function getAuthUrl(state) {
-  return oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    prompt: "consent",
-    scope: SCOPES,
-    state, // <== nanti diisi JWT yang nunjukin admin ID
-  });
+  function getAuthUrl(state) {
+    return oauth2Client.generateAuthUrl({
+      access_type: "offline",
+      prompt: "consent",
+      scope: SCOPES,
+      state, // <== nanti diisi JWT yang nunjukin admin ID
+    });
 }
 
 module.exports = { oauth2Client, getAuthUrl };
