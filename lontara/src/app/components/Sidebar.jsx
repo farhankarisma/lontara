@@ -28,7 +28,7 @@ const mailManagement = [
   {
     name: "Incoming Mail",
     icon: Mail,
-    href: "/incoming-mail",
+    href: "/incomingMail",
   },
   {
     name: "Outgoing Mail",

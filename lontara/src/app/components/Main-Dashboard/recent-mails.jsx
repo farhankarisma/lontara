@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Send, Trash2, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Send, Trash2, CheckCircle, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import Button from "../ui/button";
+import emailService from "@/services/mailManagement";
 
 const STATUS_OPTIONS = ["Unread", "In-Progress", "Done"];
 const STATUS_COLORS = {
@@ -13,28 +14,54 @@ const STATUS_COLORS = {
   Done: "bg-green-100 text-green-600",
 };
 
-export default function RecentMails(className = "") {
-  const [mails, setMails] = useState([
-    {
-      id: 1,
-      subject: "Project Approval",
-      senderName: "Sally",
-      senderAvatar: "profile-test.jpg",
-      status: "Unread",
-      statusColor: "red",
-    },
-    {
-      id: 2,
-      subject: "Meeting Schedule",
-      senderName: "Amanda",
-      senderAvatar: "profile-test.jpg",
-      status: "In-Progress",
-      statusColor: "yellow",
-    },
-  ]);
-
+export default function RecentMails({ onRefresh }) {
+  const [mails, setMails] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState(null);
   const [selectedMails, setSelectedMails] = useState(new Set());
+
+  useEffect(() => {
+    fetchRecentMails();
+  }, []);
+
+  const fetchRecentMails = async () => {
+    try {
+      setLoading(true);
+      const response = await emailService.getInboxEmails(5); // Get latest 5 emails
+      const emails = response.messages || [];
+
+      // Format emails for display
+      const formattedMails = emails.map((email) => ({
+        id: email.id,
+        subject: email.subject || "(No Subject)",
+        senderName: extractSenderName(email.from),
+        senderEmail: email.from,
+        senderAvatar: getAvatarUrl(email.from),
+        status: email.isRead ? "Done" : "Unread",
+        date: email.date,
+        snippet: email.snippet,
+      }));
+
+      setMails(formattedMails);
+    } catch (error) {
+      console.error("Error fetching recent mails:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const extractSenderName = (from) => {
+    if (!from) return "Unknown";
+    const match = from.match(/^([^<]+)</);
+    return match ? match[1].trim() : from.split("@")[0];
+  };
+
+  const getAvatarUrl = (email) => {
+    const name = extractSenderName(email);
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      name
+    )}&background=random&size=32`;
+  };
 
   const handleSelectMail = (id) => {
     setSelectedMails((prev) => {
@@ -48,36 +75,94 @@ export default function RecentMails(className = "") {
     });
   };
 
-  const handleDeleteSelected = () => {
-    setMails((prev) => prev.filter((mail) => !selectedMails.has(mail.id)));
-    setSelectedMails(new Set());
+  const handleDeleteSelected = async () => {
+    try {
+      // Delete selected emails
+      await Promise.all(
+        Array.from(selectedMails).map((id) => emailService.deleteEmail(id))
+      );
+
+      // Remove from local state
+      setMails((prev) => prev.filter((mail) => !selectedMails.has(mail.id)));
+      setSelectedMails(new Set());
+
+      // Refresh parent stats
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error("Error deleting emails:", error);
+    }
   };
 
-  const handleMarkSelectedComplete = () => {
-    setMails((prev) =>
-      prev.map((mail) =>
-        selectedMails.has(mail.id) ? { ...mail, status: "Done" } : mail
-      )
-    );
-    setSelectedMails(new Set());
+  const handleMarkSelectedComplete = async () => {
+    try {
+      // Mark selected emails as read
+      await Promise.all(
+        Array.from(selectedMails).map((id) => emailService.markAsRead(id))
+      );
+
+      // Update local state
+      setMails((prev) =>
+        prev.map((mail) =>
+          selectedMails.has(mail.id) ? { ...mail, status: "Done" } : mail
+        )
+      );
+      setSelectedMails(new Set());
+
+      // Refresh parent stats
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error("Error marking emails as complete:", error);
+    }
   };
 
-  const handleChangeStatus = (id, nextStatus) => {
-    setMails((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, status: nextStatus } : m))
-    );
-    setOpenId(null);
+  const handleChangeStatus = async (id, nextStatus) => {
+    try {
+      // Update status based on selection
+      if (nextStatus === "Done") {
+        await emailService.markAsRead(id);
+      } else if (nextStatus === "Unread") {
+        await emailService.markAsUnread(id);
+      }
+
+      // Update local state
+      setMails((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, status: nextStatus } : m))
+      );
+      setOpenId(null);
+
+      // Refresh parent stats
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error("Error changing status:", error);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="animate-spin text-blue-500" size={32} />
+        <span className="ml-3 text-gray-600">Loading recent mails...</span>
+      </div>
+    );
+  }
+
+  if (mails.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <p>No recent emails found</p>
+      </div>
+    );
+  }
 
   return (
-    <div className={`flex flex-col gap-2 ${className}`}>
+    <div className="flex flex-col gap-2">
       {mails.map((mail) => (
         <Link
           key={mail.id}
-          href={`/mails/${mail.id}`}
+          href={`/incomingMail`}
           className="flex items-center justify-between py-3 px-4 rounded-lg bg-gray-100 hover:bg-gray-50 transition relative"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             <input
               type="checkbox"
               checked={selectedMails.has(mail.id)}
@@ -90,18 +175,23 @@ export default function RecentMails(className = "") {
                 e.stopPropagation();
                 handleSelectMail(mail.id);
               }}
-              className="w-4 h-4 text-blue-500 rounded border-gray-300"
+              className="w-4 h-4 text-blue-500 rounded border-gray-300 flex-shrink-0"
             />
-            <div>
-              <h3 className="font-bold text-gray-800">{mail.subject}</h3>
-              <p className="text-sm text-gray-400">{mail.senderName}</p>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-gray-800 truncate">{mail.subject}</h3>
+              <p className="text-sm text-gray-400 truncate">{mail.senderName}</p>
+              {mail.snippet && (
+                <p className="text-xs text-gray-500 truncate mt-1">
+                  {mail.snippet}
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-shrink-0">
             <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
-              <Image
-                src={`/${mail.senderAvatar}`}
+              <img
+                src={mail.senderAvatar}
                 alt={mail.senderName}
                 width={32}
                 height={32}
@@ -109,7 +199,7 @@ export default function RecentMails(className = "") {
               />
             </div>
 
-            {/* BADGE + DROPDOWN */}
+            {/* STATUS BADGE + DROPDOWN */}
             <div className="relative">
               <button
                 type="button"
@@ -187,14 +277,14 @@ export default function RecentMails(className = "") {
         <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
           <Button
             onClick={handleDeleteSelected}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white hover:bg-red-600"
+            className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded-lg"
           >
             <Trash2 size={16} />
             Delete ({selectedMails.size})
           </Button>
           <Button
             onClick={handleMarkSelectedComplete}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white hover:bg-green-600"
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg"
           >
             <CheckCircle size={16} />
             Mark as Complete ({selectedMails.size})
