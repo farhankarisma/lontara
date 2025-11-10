@@ -17,7 +17,6 @@ export default function AppLayout({ children }) {
 
   return (
     <div className="flex-col h-screen bg-gray-50">
-      {/* Sidebar - Single component that handles both desktop and mobile */}
 
       <Header onMenuClick={toggleSidebar} />
 

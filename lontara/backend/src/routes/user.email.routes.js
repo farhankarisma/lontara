@@ -1,19 +1,23 @@
-const express = require('express');
-const { google } = require('googleapis');
-const { authMiddleware } = require('../middlewares/auth');
-const { decrypt } = require('../utils/crypto');
-const prisma = require('../config/prisma');
+const express = require("express");
+const { google } = require("googleapis");
+const { authMiddleware } = require("../middlewares/auth");
+const { decrypt } = require("../utils/crypto");
+const prisma = require("../config/prisma");
+const classifier = require("../services/machine-learning/classifier.service");
+const pdfService = require("../services/machine-learning/pdf.service");
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = express.Router();
 
 // Helper function to get authenticated Gmail client
 async function getGmailClient(userId) {
   const gmailConnection = await prisma.userGmail.findUnique({
-    where: { authUserId: userId }
+    where: { authUserId: userId },
   });
 
   if (!gmailConnection || !gmailConnection.encryptedRefresh) {
-    throw new Error('Gmail not connected');
+    throw new Error("GMAIL_NOT_CONNECTED");
   }
 
   const refreshToken = decrypt(gmailConnection.encryptedRefresh);
@@ -21,40 +25,118 @@ async function getGmailClient(userId) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_USER_REDIRECT_URI || 'http://localhost:5000/api/user/gmail-callback'
+    "http://localhost:5000/api/user/gmail-callback"
   );
 
   oauth2Client.setCredentials({
-    refresh_token: refreshToken
+    refresh_token: refreshToken,
   });
 
-  await prisma.userGmail.update({
-    where: { authUserId: userId },
-    data: { lastUsedAt: new Date() }
-  });
+  // ✅ Validate token before using
+  try {
+    await oauth2Client.getAccessToken();
 
-  return google.gmail({ version: 'v1', auth: oauth2Client });
+    await prisma.userGmail.update({
+      where: { authUserId: userId },
+      data: { lastUsedAt: new Date() },
+    });
+
+    return google.gmail({ version: "v1", auth: oauth2Client });
+  } catch (error) {
+    if (error.message && error.message.includes("invalid_grant")) {
+      console.error("❌ Refresh token expired for user:", userId);
+
+      // Clear invalid token
+      await prisma.userGmail.update({
+        where: { authUserId: userId },
+        data: {
+          encryptedRefresh: null,
+        },
+      });
+
+      throw new Error("GMAIL_TOKEN_EXPIRED");
+    }
+
+    throw error;
+  }
 }
 
 // Helper function to parse email message
-function parseMessage(message) {
+
+async function parseMessage(message, gmail = null) {
   const headers = message.payload.headers;
   const getHeader = (name) => {
-    const header = headers.find(h => h.name.toLowerCase() === name.toLowerCase());
-    return header ? header.value : '';
+    const header = headers.find(
+      (h) => h.name.toLowerCase() === name.toLowerCase()
+    );
+    return header ? header.value : "";
   };
 
-  let body = '';
+  let body = "";
+  let hasAttachments = false;
+  const attachments = [];
+
   if (message.payload.body.data) {
-    body = Buffer.from(message.payload.body.data, 'base64').toString('utf-8');
+    body = Buffer.from(message.payload.body.data, "base64").toString("utf-8");
   } else if (message.payload.parts) {
-    const textPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
-    const htmlPart = message.payload.parts.find(part => part.mimeType === 'text/html');
-    
-    if (htmlPart && htmlPart.body.data) {
-      body = Buffer.from(htmlPart.body.data, 'base64').toString('utf-8');
-    } else if (textPart && textPart.body.data) {
-      body = Buffer.from(textPart.body.data, 'base64').toString('utf-8');
+    for (const part of message.payload.parts) {
+      // Extract text body
+      if (part.mimeType === "text/plain" || part.mimeType === "text/html") {
+        if (part.body.data) {
+          const partBody = Buffer.from(part.body.data, "base64").toString(
+            "utf-8"
+          );
+          body += partBody + " ";
+        }
+      }
+
+      // ✅ Detect attachments
+      if (part.filename && part.filename.length > 0) {
+        hasAttachments = true;
+
+        const attachmentInfo = {
+          filename: part.filename,
+          mimeType: part.mimeType,
+          size: part.body.size || 0,
+          attachmentId: part.body.attachmentId || null,
+          extractedText: "", // ✅ NEW
+        };
+
+        // ✅ Extract PDF text if attachment is PDF and gmail client is provided
+        if (
+          part.mimeType === "application/pdf" &&
+          part.body.attachmentId &&
+          gmail
+        ) {
+          try {
+            console.log(`📄 Downloading attachment: ${part.filename}`);
+
+            // Download attachment from Gmail
+            const attachment = await gmail.users.messages.attachments.get({
+              userId: "me",
+              messageId: message.id,
+              id: part.body.attachmentId,
+            });
+
+            // Extract text from PDF
+            const pdfText = await pdfService.extractFromBase64(
+              attachment.data.data
+            );
+            attachmentInfo.extractedText = pdfText.trim();
+
+            console.log(
+              `✅ Extracted ${pdfText.length} chars from ${part.filename}`
+            );
+          } catch (err) {
+            console.error(
+              `❌ Failed to extract PDF text from ${part.filename}:`,
+              err.message
+            );
+          }
+        }
+
+        attachments.push(attachmentInfo);
+      }
     }
   }
 
@@ -62,355 +144,852 @@ function parseMessage(message) {
     id: message.id,
     threadId: message.threadId,
     labelIds: message.labelIds || [],
-    snippet: message.snippet || '',
-    isRead: !message.labelIds?.includes('UNREAD'),
-    from: getHeader('From'),
-    to: getHeader('To'),
-    subject: getHeader('Subject'),
-    date: getHeader('Date'),
-    body: body
+    snippet: message.snippet || "",
+    isRead: !message.labelIds?.includes("UNREAD"),
+    from: getHeader("From"),
+    to: getHeader("To"),
+    subject: getHeader("Subject"),
+    date: getHeader("Date"),
+    body: body.trim(),
+    hasAttachments: hasAttachments,
+    attachments: attachments,
   };
 }
 
-// ✅ Get inbox emails
-router.get('/inbox', authMiddleware, async (req, res) => {
+// Error handler wrapper
+const handleGmailError = (handler) => async (req, res) => {
   try {
+    await handler(req, res);
+  } catch (err) {
+    console.error("❌ Gmail API error:", err.message);
+
+    if (err.message === "GMAIL_TOKEN_EXPIRED") {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Your Gmail connection has expired. Please reconnect your Gmail account.",
+        code: "GMAIL_TOKEN_EXPIRED",
+        reconnectRequired: true,
+      });
+    }
+
+    if (err.message === "GMAIL_NOT_CONNECTED") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Gmail not connected. Please connect your Gmail account first.",
+        code: "GMAIL_NOT_CONNECTED",
+        reconnectRequired: true,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to process request",
+      error: err.message,
+    });
+  }
+};
+
+// =========================================
+// ML CLASSIFICATION ROUTES (BEFORE :id routes!)
+// =========================================
+router.get("/test", (req, res) => {
+  res.json({ message: "Email routes working!" });
+});
+
+// ✅ Debug scope route
+router.get("/debug-scope", authMiddleware, async (req, res) => {
+  try {
+    const gmailConnection = await prisma.userGmail.findUnique({
+      where: { authUserId: req.user.sub },
+    });
+
+    if (!gmailConnection) {
+      return res.json({
+        connected: false,
+        message: "Gmail not connected",
+      });
+    }
+
+    const refreshToken = decrypt(gmailConnection.encryptedRefresh);
+
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      "http://localhost:5000/api/user/gmail-callback"
+    );
+
+    oauth2Client.setCredentials({
+      refresh_token: refreshToken,
+    });
+
+    const { token } = await oauth2Client.getAccessToken();
+    const tokenInfo = await oauth2Client.getTokenInfo(token);
+
+    console.log("✅ Token scopes:", tokenInfo.scopes);
+
+    res.json({
+      connected: true,
+      scopes: tokenInfo.scopes,
+      hasReadScope: tokenInfo.scopes?.includes(
+        "https://www.googleapis.com/auth/gmail.readonly"
+      ),
+      hasSendScope: tokenInfo.scopes?.includes(
+        "https://www.googleapis.com/auth/gmail.send"
+      ),
+      hasComposeScope: tokenInfo.scopes?.includes(
+        "https://www.googleapis.com/auth/gmail.compose"
+      ),
+      hasModifyScope: tokenInfo.scopes?.includes(
+        "https://www.googleapis.com/auth/gmail.modify"
+      ),
+      lastUsedAt: gmailConnection.lastUsedAt,
+    });
+  } catch (err) {
+    console.error("❌ Debug scope error:", err);
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+});
+// ✅ Classify inbox emails
+router.get(
+  "/classify-inbox",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { maxResults = 20 } = req.query;
+    const gmail = await getGmailClient(req.user.sub);
+
+    console.log(
+      "🔄 Fetching and classifying inbox emails for:",
+      req.user.username
+    );
+
+    const response = await gmail.users.messages.list({
+      userId: "me",
+      labelIds: ["INBOX"],
+      maxResults: parseInt(maxResults),
+    });
+
+    const messages = response.data.messages || [];
+
+    if (messages.length === 0) {
+      return res.json({
+        success: true,
+        total: 0,
+        summary: { peminjaman: 0, izin: 0, pengaduan: 0 },
+        emails: [],
+        grouped: { peminjaman: [], izin: [], pengaduan: [] },
+      });
+    }
+
+    const classifiedEmails = await Promise.all(
+      messages.map(async (msg) => {
+        try {
+          const detail = await gmail.users.messages.get({
+            userId: "me",
+            id: msg.id,
+          });
+
+          // ✅ Pass gmail client to extract PDF
+          const parsedEmail = await parseMessage(detail.data, gmail);
+
+          // Build text for classification
+          let textToClassify = parsedEmail.subject + " ";
+
+          if (parsedEmail.body) {
+            textToClassify += parsedEmail.body;
+          } else if (parsedEmail.snippet) {
+            textToClassify += parsedEmail.snippet;
+          }
+
+          // ✅ Add attachment filenames AND extracted PDF text
+          if (parsedEmail.attachments && parsedEmail.attachments.length > 0) {
+            parsedEmail.attachments.forEach((att) => {
+              textToClassify += " " + att.filename;
+
+              // ✅ Include extracted PDF text
+              if (att.extractedText) {
+                textToClassify += " " + att.extractedText;
+              }
+            });
+          }
+
+          console.log("📧 Classifying:");
+          console.log("  Subject:", parsedEmail.subject);
+          console.log("  Body length:", parsedEmail.body.length);
+          console.log("  Total text length:", textToClassify.length);
+          console.log("  Has attachments:", parsedEmail.hasAttachments);
+
+          if (parsedEmail.attachments.length > 0) {
+            console.log("  Attachments:");
+            parsedEmail.attachments.forEach((att) => {
+              console.log(
+                `    - ${att.filename} (${
+                  att.extractedText?.length || 0
+                } chars extracted)`
+              );
+            });
+          }
+
+          // Classify email
+          const classification = await classifier.classify({
+            subject: parsedEmail.subject,
+            body: textToClassify,
+          });
+
+          console.log(
+            "  ✅ Classified as:",
+            classification.category,
+            `(${(classification.confidence * 100).toFixed(1)}%)`
+          );
+
+          return {
+            id: msg.id,
+            threadId: msg.threadId,
+            ...parsedEmail,
+            category: classification.category,
+            confidence: classification.confidence,
+            confidenceScores: classification.confidenceScores,
+            ruleApplied: classification.ruleApplied,
+          };
+        } catch (error) {
+          console.error(`❌ Error classifying email ${msg.id}:`, error.message);
+          return null;
+        }
+      })
+    );
+
+    // Filter out failed classifications
+    const successfulClassifications = classifiedEmails.filter(
+      (email) => email !== null
+    );
+
+    // Group by category
+    const grouped = {
+      peminjaman: successfulClassifications.filter(
+        (e) => e.category === "peminjaman"
+      ),
+      izin: successfulClassifications.filter((e) => e.category === "izin"),
+      pengaduan: successfulClassifications.filter(
+        (e) => e.category === "pengaduan"
+      ),
+    };
+
+    console.log("✅ Classification complete:");
+    console.log(`   Peminjaman: ${grouped.peminjaman.length}`);
+    console.log(`   Izin: ${grouped.izin.length}`);
+    console.log(`   Pengaduan: ${grouped.pengaduan.length}`);
+
+    res.json({
+      success: true,
+      total: successfulClassifications.length,
+      summary: {
+        peminjaman: grouped.peminjaman.length,
+        izin: grouped.izin.length,
+        pengaduan: grouped.pengaduan.length,
+      },
+      emails: successfulClassifications,
+      grouped: grouped,
+    });
+  })
+);
+
+// ✅ Get classification statistics
+router.get(
+  "/:id/classify",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { id } = req.params;
+    const gmail = await getGmailClient(req.user.sub);
+
+    console.log("🔍 Classifying email:", id);
+
+    const message = await gmail.users.messages.get({
+      userId: "me",
+      id: id,
+    });
+
+    // ✅ Pass gmail client to extract PDF
+    const parsedEmail = await parseMessage(message.data, gmail);
+
+    // Build text with PDF content
+    let textToClassify = parsedEmail.subject + " ";
+
+    if (parsedEmail.body) {
+      textToClassify += parsedEmail.body;
+    } else if (parsedEmail.snippet) {
+      textToClassify += parsedEmail.snippet;
+    }
+
+    if (parsedEmail.attachments && parsedEmail.attachments.length > 0) {
+      parsedEmail.attachments.forEach((att) => {
+        textToClassify += " " + att.filename;
+        if (att.extractedText) {
+          textToClassify += " " + att.extractedText;
+        }
+      });
+    }
+
+    const classification = await classifier.classify({
+      subject: parsedEmail.subject,
+      body: textToClassify,
+    });
+
+    res.json({
+      success: true,
+      email: parsedEmail,
+      classification: {
+        category: classification.category,
+        confidence: classification.confidence,
+        confidenceScores: classification.confidenceScores,
+        ruleApplied: classification.ruleApplied,
+      },
+    });
+  })
+);
+
+// =========================================
+// STANDARD EMAIL ROUTES
+// =========================================
+
+// ✅ Get inbox emails
+router.get(
+  "/inbox",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
     const { maxResults = 10, pageToken } = req.query;
     const gmail = await getGmailClient(req.user.sub);
 
-    console.log('✅ Fetching inbox emails for user:', req.user.username);
+    console.log("✅ Fetching inbox emails for user:", req.user.username);
 
     const response = await gmail.users.messages.list({
-      userId: 'me',
-      labelIds: ['INBOX'],
+      userId: "me",
+      labelIds: ["INBOX"],
       maxResults: parseInt(maxResults),
-      pageToken: pageToken || undefined
+      pageToken: pageToken || undefined,
     });
 
     const messages = response.data.messages || [];
     const messageDetails = await Promise.all(
       messages.map(async (msg) => {
         const detail = await gmail.users.messages.get({
-          userId: 'me',
-          id: msg.id
+          userId: "me",
+          id: msg.id,
         });
-        return parseMessage(detail.data);
+        // ✅ Pass gmail if you want PDF extraction, or null if not needed
+        return parseMessage(detail.data, null);
       })
     );
 
-    console.log('✅ Found', messageDetails.length, 'inbox messages');
+    console.log("✅ Found", messageDetails.length, "inbox messages");
 
     res.json({
+      success: true,
       messages: messageDetails,
       nextPageToken: response.data.nextPageToken,
-      resultSizeEstimate: response.data.resultSizeEstimate
+      resultSizeEstimate: response.data.resultSizeEstimate,
     });
-
-  } catch (err) {
-    console.error('❌ Fetch inbox error:', err);
-    res.status(500).json({ message: 'Failed to fetch emails', error: err.message });
-  }
-});
+  })
+);
 
 // ✅ Get sent emails
-router.get('/sent', authMiddleware, async (req, res) => {
-  try {
+router.get(
+  "/sent",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
     const { maxResults = 10, pageToken } = req.query;
     const gmail = await getGmailClient(req.user.sub);
 
-    console.log('✅ Fetching sent emails for user:', req.user.username);
+    console.log("✅ Fetching sent emails for user:", req.user.username);
 
     const response = await gmail.users.messages.list({
-      userId: 'me',
-      labelIds: ['SENT'],
+      userId: "me",
+      labelIds: ["SENT"],
       maxResults: parseInt(maxResults),
-      pageToken: pageToken || undefined
+      pageToken: pageToken || undefined,
     });
 
     const messages = response.data.messages || [];
     const messageDetails = await Promise.all(
       messages.map(async (msg) => {
         const detail = await gmail.users.messages.get({
-          userId: 'me',
-          id: msg.id
+          userId: "me",
+          id: msg.id,
         });
         return parseMessage(detail.data);
       })
     );
 
-    console.log('✅ Found', messageDetails.length, 'sent messages');
+    console.log("✅ Found", messageDetails.length, "sent messages");
 
     res.json({
+      success: true,
       messages: messageDetails,
       nextPageToken: response.data.nextPageToken,
-      resultSizeEstimate: response.data.resultSizeEstimate
+      resultSizeEstimate: response.data.resultSizeEstimate,
     });
-
-  } catch (err) {
-    console.error('❌ Fetch sent emails error:', err);
-    res.status(500).json({ message: 'Failed to fetch sent emails', error: err.message });
-  }
-});
+  })
+);
 
 // ✅ Get trash emails
-router.get('/trash', authMiddleware, async (req, res) => {
-  try {
+router.get(
+  "/trash",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
     const { maxResults = 10, pageToken } = req.query;
     const gmail = await getGmailClient(req.user.sub);
 
-    console.log('✅ Fetching trash emails for user:', req.user.username);
+    console.log("✅ Fetching trash emails for user:", req.user.username);
 
     const response = await gmail.users.messages.list({
-      userId: 'me',
-      labelIds: ['TRASH'],
+      userId: "me",
+      labelIds: ["TRASH"],
       maxResults: parseInt(maxResults),
-      pageToken: pageToken || undefined
+      pageToken: pageToken || undefined,
     });
 
     const messages = response.data.messages || [];
     const messageDetails = await Promise.all(
       messages.map(async (msg) => {
         const detail = await gmail.users.messages.get({
-          userId: 'me',
-          id: msg.id
+          userId: "me",
+          id: msg.id,
         });
         return parseMessage(detail.data);
       })
     );
 
-    console.log('✅ Found', messageDetails.length, 'trash messages');
+    console.log("✅ Found", messageDetails.length, "trash messages");
 
     res.json({
+      success: true,
       messages: messageDetails,
       nextPageToken: response.data.nextPageToken,
-      resultSizeEstimate: response.data.resultSizeEstimate
+      resultSizeEstimate: response.data.resultSizeEstimate,
     });
-
-  } catch (err) {
-    console.error('❌ Fetch trash emails error:', err);
-    res.status(500).json({ message: 'Failed to fetch trash emails', error: err.message });
-  }
-});
+  })
+);
 
 // ✅ Get draft emails
-router.get('/drafts', authMiddleware, async (req, res) => {
-  try {
+router.get(
+  "/drafts",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
     const { maxResults = 10, pageToken } = req.query;
     const gmail = await getGmailClient(req.user.sub);
 
-    console.log('✅ Fetching draft emails for user:', req.user.username);
+    console.log("✅ Fetching draft emails for user:", req.user.username);
 
     const response = await gmail.users.drafts.list({
-      userId: 'me',
+      userId: "me",
       maxResults: parseInt(maxResults),
-      pageToken: pageToken || undefined
+      pageToken: pageToken || undefined,
     });
 
     const drafts = response.data.drafts || [];
     const draftDetails = await Promise.all(
       drafts.map(async (draft) => {
         const detail = await gmail.users.drafts.get({
-          userId: 'me',
-          id: draft.id
+          userId: "me",
+          id: draft.id,
         });
         return {
           id: detail.data.id,
-          message: parseMessage(detail.data.message)
+          message: parseMessage(detail.data.message),
         };
       })
     );
 
-    console.log('✅ Found', draftDetails.length, 'drafts');
+    console.log("✅ Found", draftDetails.length, "drafts");
 
     res.json({
+      success: true,
       drafts: draftDetails,
       nextPageToken: response.data.nextPageToken,
-      resultSizeEstimate: response.data.resultSizeEstimate
+      resultSizeEstimate: response.data.resultSizeEstimate,
+    });
+  })
+);
+
+router.post(
+  "/save-drafts",
+  authMiddleware,
+  upload.array("attachments", 10),
+  handleGmailError(async (req, res) => {
+    const { to, subject, body, priority, fields, link } = req.body;
+    const gmail = await getGmailClient(req.user.sub);
+
+    console.log("💾 Saving draft for:", to || "(no recipient)");
+
+    // Build draft message
+    const messageParts = [
+      to ? `To: ${to}` : "",
+      `Subject: ${subject || "(No Subject)"}`,
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/mixed; boundary="boundary"',
+      "",
+      "--boundary",
+      "Content-Type: text/html; charset=UTF-8",
+      "",
+      `<html><body>`,
+      `<p>${(body || "").replace(/\n/g, "<br>")}</p>`,
+      priority ? `<p><strong>Priority:</strong> ${priority}</p>` : "",
+      fields ? `<p><strong>Department:</strong> ${fields}</p>` : "",
+      link ? `<p><strong>Link:</strong> <a href="${link}">${link}</a></p>` : "",
+      `</body></html>`,
+      "--boundary",
+    ].filter((line) => line !== ""); // Remove empty lines
+
+    // Add attachments if present
+    if (req.files && req.files.length > 0) {
+      console.log(`📎 Adding ${req.files.length} attachments to draft`);
+
+      for (const file of req.files) {
+        const base64Data = file.buffer.toString("base64");
+
+        messageParts.push(
+          `Content-Type: ${file.mimetype}; name="${file.originalname}"`,
+          "Content-Transfer-Encoding: base64",
+          `Content-Disposition: attachment; filename="${file.originalname}"`,
+          "",
+          base64Data,
+          "--boundary"
+        );
+      }
+    }
+
+    messageParts.push("--boundary--");
+
+    // Encode message
+    const email = messageParts.join("\n");
+    const encodedEmail = Buffer.from(email)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    // Save as draft via Gmail API
+    const result = await gmail.users.drafts.create({
+      userId: "me",
+      requestBody: {
+        message: {
+          raw: encodedEmail,
+        },
+      },
     });
 
-  } catch (err) {
-    console.error('❌ Fetch drafts error:', err);
-    res.status(500).json({ message: 'Failed to fetch drafts', error: err.message });
-  }
-});
+    console.log("✅ Draft saved successfully:", result.data.id);
+
+    res.json({
+      success: true,
+      message: "Draft saved successfully",
+      draftId: result.data.id,
+    });
+  })
+);
+
+router.post(
+  "/send",
+  authMiddleware,
+  upload.array("attachments", 10), // ✅ Support up to 10 attachments
+  handleGmailError(async (req, res) => {
+    const { to, subject, body, priority, fields, link } = req.body;
+    const gmail = await getGmailClient(req.user.sub);
+
+    console.log("📧 Sending email to:", to);
+
+    // Build email message
+    const messageParts = [
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/mixed; boundary="boundary"',
+      "",
+      "--boundary",
+      "Content-Type: text/html; charset=UTF-8",
+      "",
+      `<html><body>`,
+      `<p>${body.replace(/\n/g, "<br>")}</p>`,
+      priority ? `<p><strong>Priority:</strong> ${priority}</p>` : "",
+      fields ? `<p><strong>Department:</strong> ${fields}</p>` : "",
+      link ? `<p><strong>Link:</strong> <a href="${link}">${link}</a></p>` : "",
+      `</body></html>`,
+      "--boundary",
+    ];
+
+    // Add attachments if present
+    if (req.files && req.files.length > 0) {
+      console.log(`📎 Adding ${req.files.length} attachments`);
+
+      for (const file of req.files) {
+        const base64Data = file.buffer.toString("base64");
+
+        messageParts.push(
+          `Content-Type: ${file.mimetype}; name="${file.originalname}"`,
+          "Content-Transfer-Encoding: base64",
+          `Content-Disposition: attachment; filename="${file.originalname}"`,
+          "",
+          base64Data,
+          "--boundary"
+        );
+      }
+    }
+
+    messageParts.push("--boundary--");
+
+    // Encode message
+    const email = messageParts.join("\n");
+    const encodedEmail = Buffer.from(email)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    // Send via Gmail API
+    const result = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw: encodedEmail,
+      },
+    });
+
+    console.log("✅ Email sent successfully:", result.data.id);
+
+    res.json({
+      success: true,
+      message: "Email sent successfully",
+      messageId: result.data.id,
+    });
+  })
+);
 
 // ✅ Get unread count
-router.get('/unread-count', authMiddleware, async (req, res) => {
-  try {
+router.get(
+  "/unread-count",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
     const gmail = await getGmailClient(req.user.sub);
 
     const response = await gmail.users.messages.list({
-      userId: 'me',
-      labelIds: ['INBOX', 'UNREAD'],
-      maxResults: 1
+      userId: "me",
+      labelIds: ["INBOX", "UNREAD"],
+      maxResults: 1,
     });
 
-    console.log('✅ Unread count:', response.data.resultSizeEstimate || 0);
+    console.log("✅ Unread count:", response.data.resultSizeEstimate || 0);
 
     res.json({
-      count: response.data.resultSizeEstimate || 0
+      success: true,
+      count: response.data.resultSizeEstimate || 0,
     });
-
-  } catch (err) {
-    console.error('❌ Get unread count error:', err);
-    res.status(500).json({ message: 'Failed to get unread count', error: err.message });
-  }
-});
-
-// ✅ Get specific email by ID
-router.get('/:id', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const gmail = await getGmailClient(req.user.sub);
-
-    console.log('✅ Fetching email:', id);
-
-    const message = await gmail.users.messages.get({
-      userId: 'me',
-      id: id
-    });
-
-    res.json(parseMessage(message.data));
-
-  } catch (err) {
-    console.error('❌ Fetch email error:', err);
-    res.status(500).json({ message: 'Failed to fetch email', error: err.message });
-  }
-});
-
-// ✅ Mark email as read
-router.post('/:id/read', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const gmail = await getGmailClient(req.user.sub);
-
-    await gmail.users.messages.modify({
-      userId: 'me',
-      id: id,
-      requestBody: {
-        removeLabelIds: ['UNREAD']
-      }
-    });
-
-    console.log('✅ Email marked as read:', id);
-
-    res.json({ success: true, message: 'Marked as read' });
-
-  } catch (err) {
-    console.error('❌ Mark as read error:', err);
-    res.status(500).json({ message: 'Failed to mark as read', error: err.message });
-  }
-});
-
-// ✅ Mark email as unread
-router.post('/:id/unread', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const gmail = await getGmailClient(req.user.sub);
-
-    await gmail.users.messages.modify({
-      userId: 'me',
-      id: id,
-      requestBody: {
-        addLabelIds: ['UNREAD']
-      }
-    });
-
-    console.log('✅ Email marked as unread:', id);
-
-    res.json({ success: true, message: 'Marked as unread' });
-
-  } catch (err) {
-    console.error('❌ Mark as unread error:', err);
-    res.status(500).json({ message: 'Failed to mark as unread', error: err.message });
-  }
-});
-
-// ✅ Delete email (move to trash)
-router.delete('/:id', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const gmail = await getGmailClient(req.user.sub);
-
-    await gmail.users.messages.trash({
-      userId: 'me',
-      id: id
-    });
-
-    console.log('✅ Email moved to trash:', id);
-
-    res.json({ success: true, message: 'Email moved to trash' });
-
-  } catch (err) {
-    console.error('❌ Delete email error:', err);
-    res.status(500).json({ message: 'Failed to delete email', error: err.message });
-  }
-});
-
-// ✅ Permanently delete email
-router.delete('/:id/permanent', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const gmail = await getGmailClient(req.user.sub);
-
-    await gmail.users.messages.delete({
-      userId: 'me',
-      id: id
-    });
-
-    console.log('✅ Email permanently deleted:', id);
-
-    res.json({ success: true, message: 'Email permanently deleted' });
-
-  } catch (err) {
-    console.error('❌ Permanent delete error:', err);
-    res.status(500).json({ message: 'Failed to permanently delete email', error: err.message });
-  }
-});
+  })
+);
 
 // ✅ Search emails
-router.get('/search', authMiddleware, async (req, res) => {
-  try {
+router.get(
+  "/search",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
     const { q, maxResults = 10, pageToken } = req.query;
 
     if (!q) {
-      return res.status(400).json({ message: 'Search query (q) is required' });
+      return res.status(400).json({
+        success: false,
+        message: "Search query (q) is required",
+      });
     }
 
     const gmail = await getGmailClient(req.user.sub);
 
-    console.log('✅ Searching emails with query:', q);
+    console.log("✅ Searching emails with query:", q);
 
     const response = await gmail.users.messages.list({
-      userId: 'me',
+      userId: "me",
       q: q,
       maxResults: parseInt(maxResults),
-      pageToken: pageToken || undefined
+      pageToken: pageToken || undefined,
     });
 
     const messages = response.data.messages || [];
     const messageDetails = await Promise.all(
       messages.map(async (msg) => {
         const detail = await gmail.users.messages.get({
-          userId: 'me',
-          id: msg.id
+          userId: "me",
+          id: msg.id,
         });
         return parseMessage(detail.data);
       })
     );
 
-    console.log('✅ Found', messageDetails.length, 'messages matching query');
+    console.log("✅ Found", messageDetails.length, "messages matching query");
 
     res.json({
+      success: true,
       messages: messageDetails,
       nextPageToken: response.data.nextPageToken,
-      resultSizeEstimate: response.data.resultSizeEstimate
+      resultSizeEstimate: response.data.resultSizeEstimate,
+    });
+  })
+);
+
+// =========================================
+// DYNAMIC :id ROUTES (MUST BE LAST!)
+// =========================================
+
+// ✅ Classify single email by ID
+router.get(
+  "/:id/classify",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { id } = req.params;
+    const gmail = await getGmailClient(req.user.sub);
+
+    console.log("🔍 Classifying email:", id);
+
+    const message = await gmail.users.messages.get({
+      userId: "me",
+      id: id,
     });
 
-  } catch (err) {
-    console.error('❌ Search emails error:', err);
-    res.status(500).json({ message: 'Failed to search emails', error: err.message });
-  }
-});
+    const parsedEmail = parseMessage(message.data);
+
+    // ✅ NEW: Build text with attachments
+    let textToClassify = parsedEmail.subject + " ";
+
+    if (parsedEmail.body) {
+      textToClassify += parsedEmail.body;
+    } else if (parsedEmail.snippet) {
+      textToClassify += parsedEmail.snippet;
+    }
+
+    if (parsedEmail.attachments && parsedEmail.attachments.length > 0) {
+      parsedEmail.attachments.forEach((att) => {
+        textToClassify += " " + att.filename;
+      });
+    }
+
+    const classification = await classifier.classify({
+      subject: parsedEmail.subject,
+      body: textToClassify,
+    });
+
+    res.json({
+      success: true,
+      email: parsedEmail,
+      classification: {
+        category: classification.category,
+        confidence: classification.confidence,
+        confidenceScores: classification.confidenceScores,
+        ruleApplied: classification.ruleApplied,
+      },
+    });
+  })
+);
+
+// ✅ Get specific email by ID
+router.get(
+  "/:id",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { id } = req.params;
+    const gmail = await getGmailClient(req.user.sub);
+
+    console.log("✅ Fetching email:", id);
+
+    const message = await gmail.users.messages.get({
+      userId: "me",
+      id: id,
+    });
+
+    res.json({
+      success: true,
+      email: parseMessage(message.data),
+    });
+  })
+);
+
+// ✅ Mark email as read
+router.post(
+  "/:id/read",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { id } = req.params;
+    const gmail = await getGmailClient(req.user.sub);
+
+    await gmail.users.messages.modify({
+      userId: "me",
+      id: id,
+      requestBody: {
+        removeLabelIds: ["UNREAD"],
+      },
+    });
+
+    console.log("✅ Email marked as read:", id);
+
+    res.json({ success: true, message: "Marked as read" });
+  })
+);
+
+// ✅ Mark email as unread
+router.post(
+  "/:id/unread",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { id } = req.params;
+    const gmail = await getGmailClient(req.user.sub);
+
+    await gmail.users.messages.modify({
+      userId: "me",
+      id: id,
+      requestBody: {
+        addLabelIds: ["UNREAD"],
+      },
+    });
+
+    console.log("✅ Email marked as unread:", id);
+
+    res.json({ success: true, message: "Marked as unread" });
+  })
+);
+
+// ✅ Delete email (move to trash)
+router.delete(
+  "/:id",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { id } = req.params;
+    const gmail = await getGmailClient(req.user.sub);
+
+    await gmail.users.messages.trash({
+      userId: "me",
+      id: id,
+    });
+
+    console.log("✅ Email moved to trash:", id);
+
+    res.json({ success: true, message: "Email moved to trash" });
+  })
+);
+
+// ✅ Permanently delete email
+router.delete(
+  "/:id/permanent",
+  authMiddleware,
+  handleGmailError(async (req, res) => {
+    const { id } = req.params;
+    const gmail = await getGmailClient(req.user.sub);
+
+    await gmail.users.messages.delete({
+      userId: "me",
+      id: id,
+    });
+
+    console.log("✅ Email permanently deleted:", id);
+
+    res.json({ success: true, message: "Email permanently deleted" });
+  })
+);
 
 module.exports = router;

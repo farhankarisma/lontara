@@ -1,13 +1,13 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const mlRoutes = require("./routes/ml.classification.routes");
 
+const prisma = require("./config/prisma");
 
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
@@ -33,11 +33,15 @@ app.use("/api/user", userActivationRoutes);
 const userGmailOAuthRoutes = require("./routes/user.gmail.oauth.routes");
 app.use("/api/user", userGmailOAuthRoutes);
 
-// ✅ Email routes
+// ✅ FIX THIS LINE - GANTI DARI "/api/emails" KE "/api/user/emails"
 const userEmailRoutes = require("./routes/user.email.routes");
-app.use("/api/emails", userEmailRoutes);
+app.use("/api/user/emails", userEmailRoutes); // ← FIXED!
+
+// ✅ ML routes
+app.use("/api/ml", mlRoutes);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`Server running at http://localhost:${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`✅ Server running at http://localhost:${PORT}`);
+  console.log(`✅ Email routes: /api/user/emails/*`);
+});

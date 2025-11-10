@@ -10,7 +10,7 @@ const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("authToken");
+    const token = localStorage.getItem("token"); // ✅ GANTI KE "token"
     if (token) {
       config.headers["Authorization"] = `Bearer ${token}`;
     }
@@ -31,13 +31,13 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const checkUserSession = async () => {
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("token"); // ✅ GANTI KE "token"
       if (token) {
         try {
           const response = await apiClient.get("/auth/me");
           setUser(response.data);
         } catch (err) {
-          localStorage.removeItem("authToken");
+          localStorage.removeItem("token"); // ✅ GANTI KE "token"
         }
       }
       setLoading(false);
@@ -52,8 +52,10 @@ export const AuthProvider = ({ children }) => {
       const response = await apiClient.post("/auth/login", credentials);
       const { token, user: userData } = response.data;
 
-      localStorage.setItem("authToken", token);
+      localStorage.setItem("token", token); // ✅ GANTI KE "token"
       setUser(userData);
+
+      console.log("✅ Token saved:", localStorage.getItem("token")); // ✅ DEBUG
 
       return { success: true, user: userData };
     } catch (err) {
@@ -69,7 +71,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem("authToken");
+    localStorage.removeItem("token"); // ✅ GANTI KE "token"
     router.push("/login");
   };
 
@@ -78,6 +80,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     isAuthenticated: !!user,
+    isAdmin: user?.role === "ADMIN",
+    isStaff: user?.role === "STAFF",
     login,
     logout,
   };

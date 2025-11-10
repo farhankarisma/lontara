@@ -9,6 +9,8 @@ import { PieChart } from "@mui/x-charts/PieChart";
 import { FiRefreshCw } from "react-icons/fi";
 import RecentMails from "../components/Main-Dashboard/recent-mails";
 import emailService from "@/services/mailManagement";
+import AppLayout from "../components/ui/AppLayout";
+import ProtectedRoute from "../components/Routes/ProtectedRoutes";
 
 function PieCard({ title, total, data, loading }) {
   return (
@@ -55,6 +57,7 @@ function PieCard({ title, total, data, loading }) {
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [mailStats, setMailStats] = useState({
     incoming: {
       total: 0,
@@ -69,25 +72,59 @@ export default function Dashboard() {
     },
   });
 
+  // ✅ Handle Gmail reconnect
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gmailConnected = params.get("gmail_connected");
+
+    if (gmailConnected === "true") {
+      console.log("✅ Gmail reconnected! Fetching fresh data...");
+      window.history.replaceState({}, "", "/main-dashboard");
+    }
+
     fetchMailStats();
   }, []);
 
   const fetchMailStats = async () => {
     try {
       setLoading(true);
+      setError(null);
 
-      // Fetch inbox emails
+      console.log("🔄 Fetching mail stats...");
+
+      // ✅ Fetch inbox emails - CORRECT data access
       const inboxResponse = await emailService.getInboxEmails(100);
-      const inboxEmails = inboxResponse.messages || [];
+      console.log("📥 Inbox response:", inboxResponse);
 
-      // Fetch sent emails
+      if (!inboxResponse.success) {
+        throw new Error(inboxResponse.error || "Failed to fetch inbox");
+      }
+
+      const inboxEmails = inboxResponse.data?.messages || [];
+
+      // ✅ Fetch sent emails
       const sentResponse = await emailService.getSentEmails(100);
-      const sentEmails = sentResponse.messages || [];
+      console.log("📤 Sent response:", sentResponse);
 
-      // Fetch drafts
+      if (!sentResponse.success) {
+        throw new Error(sentResponse.error || "Failed to fetch sent");
+      }
+
+      const sentEmails = sentResponse.data?.messages || [];
+
+      // ✅ Fetch drafts
       const draftsResponse = await emailService.getDraftEmails(100);
-      const draftEmails = draftsResponse.messages || [];
+      console.log("📝 Drafts response:", draftsResponse);
+
+      if (!draftsResponse.success) {
+        throw new Error(draftsResponse.error || "Failed to fetch drafts");
+      }
+
+      const draftEmails = draftsResponse.data?.messages || [];
+
+      console.log(
+        `✅ Fetched: ${inboxEmails.length} inbox, ${sentEmails.length} sent, ${draftEmails.length} drafts`
+      );
 
       // Calculate incoming mail stats
       const unreadIncoming = inboxEmails.filter((e) => !e.isRead).length;
@@ -110,8 +147,21 @@ export default function Dashboard() {
           completed: completedOutgoing,
         },
       });
+
+      console.log("✅ Mail stats updated:", {
+        incoming: inboxEmails.length,
+        sent: sentEmails.length,
+        drafts: draftEmails.length,
+      });
     } catch (error) {
-      console.error("Error fetching mail stats:", error);
+      console.error("❌ Error fetching mail stats:", error);
+      setError(error.message);
+
+      // Set empty state on error
+      setMailStats({
+        incoming: { total: 0, unread: 0, completed: 0 },
+        outgoing: { total: 0, unread: 0, drafts: 0, completed: 0 },
+      });
     } finally {
       setLoading(false);
     }
@@ -154,79 +204,98 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-6 min-h-screen bg-white">
-      {/* Welcome Section */}
-      <div className="flex mb-8 justify-between items-center">
-        <h1 className="text-3xl font-medium text-gray-800">Mail Overview</h1>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchMailStats}
-            disabled={loading}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <FiRefreshCw
-              className={`text-gray-600 ${loading ? "animate-spin" : ""}`}
-              size={20}
+    <ProtectedRoute>
+      <AppLayout>
+        <div className="p-6 min-h-screen bg-white">
+          {/* Error Banner */}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-600">❌ {error}</p>
+              <button
+                onClick={fetchMailStats}
+                className="mt-2 text-sm text-red-700 underline"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {/* Welcome Section */}
+          <div className="flex mb-8 justify-between items-center">
+            <h1 className="text-3xl font-medium text-gray-800">
+              Mail Overview
+            </h1>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={fetchMailStats}
+                disabled={loading}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <FiRefreshCw
+                  className={`text-gray-600 ${loading ? "animate-spin" : ""}`}
+                  size={20}
+                />
+              </button>
+              <Link
+                href="/outgoing-mail"
+                className="text-white text-sm bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg shadow-md font-semibold transition-colors"
+              >
+                + Create New Mail
+              </Link>
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Calendar Card */}
+            <div className="flex-1 bg-white border border-gray-200 text-black/70 rounded-2xl shadow-sm p-4 flex flex-col min-w-[300px]">
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <DateCalendar
+                  sx={{
+                    width: "100%",
+                    height: "100%",
+                    maxHeight: "400px",
+                    "& .MuiPickersCalendarHeader-label": {
+                      fontWeight: "bold",
+                      fontSize: "0.9rem",
+                    },
+                    "& .MuiDayCalendar-weekDayLabel": {
+                      fontWeight: "medium",
+                    },
+                  }}
+                />
+              </LocalizationProvider>
+            </div>
+
+            {/* Pie Chart Cards */}
+            <PieCard
+              title="Incoming Mail"
+              total={mailStats.incoming.total}
+              data={incomingMailData}
+              loading={loading}
             />
-          </button>
-          <Link
-            href="/compose"
-            className="text-white text-sm bg-blue-600 hover:bg-blue-700 px-5 py-2 rounded-lg shadow-md font-semibold transition-colors"
-          >
-            + Create New Mail
-          </Link>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Calendar Card */}
-        <div className="flex-1 bg-white border border-gray-200 text-black/70 rounded-2xl shadow-sm p-4 flex flex-col min-w-[300px]">
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <DateCalendar
-              sx={{
-                width: "100%",
-                height: "100%",
-                maxHeight: "400px",
-                "& .MuiPickersCalendarHeader-label": {
-                  fontWeight: "bold",
-                  fontSize: "0.9rem",
-                },
-                "& .MuiDayCalendar-weekDayLabel": {
-                  fontWeight: "medium",
-                },
-              }}
+            <PieCard
+              title="Outgoing Mail"
+              total={mailStats.outgoing.total}
+              data={outgoingMailData}
+              loading={loading}
             />
-          </LocalizationProvider>
+          </div>
+
+          {/* Recent Mails Section */}
+          <div className="flex mb-8 mt-8 justify-between items-center">
+            <h1 className="text-3xl font-medium text-gray-800">Recent Mails</h1>
+            <Link
+              href="/incomingMail"
+              className="text-md text-black/50 hover:text-black/70"
+            >
+              See All
+            </Link>
+          </div>
+          <h1 className="text-xl text-gray-800 ml-3 mb-5">Today</h1>
+          <RecentMails onRefresh={fetchMailStats} />
         </div>
-
-        {/* Pie Chart Cards */}
-        <PieCard
-          title="Incoming Mail"
-          total={mailStats.incoming.total}
-          data={incomingMailData}
-          loading={loading}
-        />
-        <PieCard
-          title="Outgoing Mail"
-          total={mailStats.outgoing.total}
-          data={outgoingMailData}
-          loading={loading}
-        />
-      </div>
-
-      {/* Recent Mails Section */}
-      <div className="flex mb-8 mt-8 justify-between items-center">
-        <h1 className="text-3xl font-medium text-gray-800">Recent Mails</h1>
-        <Link
-          href="/incomingMail"
-          className="text-md text-black/50 hover:text-black/70"
-        >
-          See All
-        </Link>
-      </div>
-      <h1 className="text-xl text-gray-800 ml-3 mb-5">Today</h1>
-      <RecentMails onRefresh={fetchMailStats} />
-    </div>
+      </AppLayout>
+    </ProtectedRoute>
   );
 }

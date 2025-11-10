@@ -14,7 +14,8 @@ import {
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import Image from "next/image";
+import LogoutModal from "../modals/LogoutModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 const menuItems = [
   {
@@ -47,22 +48,21 @@ const settings = [
     name: "Accounts",
     icon: User,
     href: "/users",
+    requiredRole: "ADMIN",
   },
   {
     name: "Settings",
     icon: Settings,
     href: "/settings",
-  },
-  {
-    name: "Logout",
-    icon: LogOut,
-    href: "/logout",
+    requiredRole: null,
   },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
   const pathname = usePathname();
+  const { logout, user, isAdmin } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const checkIfMobile = () => {
@@ -80,6 +80,31 @@ export default function Sidebar({ isOpen, onClose }) {
     }
   };
 
+  const filteredSettings = settings.filter((item) => {
+    if (!item.requiredRole) return true;
+
+    if (item.requiredRole === "ADMIN") return isAdmin;
+
+    if (item.requiredRole === "STAFF") return true;
+
+    return false;
+  });
+
+  const handleLogoutClick = (e) => {
+    e.preventDefault();
+    setShowLogoutModal(true);
+  };
+
+  const handleLogoutConfirm = () => {
+    logout();
+
+    setShowLogoutModal(false);
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutModal(false);
+  };
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -94,7 +119,7 @@ export default function Sidebar({ isOpen, onClose }) {
       <div
         className={`
         bg-white min-h-screen shadow-lg border-r border-gray-200
-        lg:relative lg:w-64 lg:translate-x-0
+        lg:relative lg:w-64 lg:translate-x-0 lg:sticky
         fixed top-0 left-0 z-50 w-80 transform transition-transform duration-300 ease-in-out
         ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}
@@ -170,7 +195,7 @@ export default function Sidebar({ isOpen, onClose }) {
           </h2>
 
           <nav className="space-y-2">
-            {settings.map((item) => {
+            {filteredSettings.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
 
@@ -190,6 +215,13 @@ export default function Sidebar({ isOpen, onClose }) {
                 </Link>
               );
             })}
+            <button
+              onClick={handleLogoutClick}
+              className="w-full flex items-center space-x-3 px-4 py-3 text-sm rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="font-medium">Logout</span>
+            </button>
           </nav>
         </div>
 
@@ -201,6 +233,12 @@ export default function Sidebar({ isOpen, onClose }) {
           </div>
         </div>
       </div>
+
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={handleLogoutCancel}
+        onConfirm={handleLogoutConfirm}
+      />
     </>
   );
 }

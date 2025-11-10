@@ -1,691 +1,352 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import apiClient from "./apiClient";
 
-class EmailService {
-  // Get auth token from localStorage
-  getAuthToken() {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("authToken");
-    }
-    return null;
-  }
+class MailService {
+  // ==================== GET EMAILS ====================
 
-  // Get auth headers
-  getAuthHeaders() {
-    const token = this.getAuthToken();
-    return {
-      "Content-Type": "application/json",
-      Authorization: token ? `Bearer ${token}` : "",
-    };
-  }
-
-  // Get inbox emails
   async getInboxEmails(maxResults = 50) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/emails/inbox?maxResults=${maxResults}`,
-        {
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch inbox emails");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching inbox:", error);
-      throw error;
-    }
+    return apiClient.get(`/user/emails/inbox?maxResults=${maxResults}`);
   }
 
-  // Get sent emails
   async getSentEmails(maxResults = 50) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/emails/sent?maxResults=${maxResults}`,
-        {
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch sent emails");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching sent:", error);
-      throw error;
-    }
+    return apiClient.get(`/user/emails/sent?maxResults=${maxResults}`);
   }
 
-  // Get trash emails
   async getTrashEmails(maxResults = 50) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/emails/trash?maxResults=${maxResults}`,
-        {
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch trash emails");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching trash:", error);
-      throw error;
-    }
+    return apiClient.get(`/user/emails/trash?maxResults=${maxResults}`);
   }
 
-  // Get draft emails
   async getDraftEmails(maxResults = 50) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/emails/drafts?maxResults=${maxResults}`,
-        {
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch draft emails");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching drafts:", error);
-      throw error;
-    }
+    return apiClient.get(`/user/emails/drafts?maxResults=${maxResults}`);
   }
 
-  // Get unread count
   async getUnreadCount() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/unread-count`, {
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch unread count");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching unread count:", error);
-      throw error;
-    }
+    return apiClient.get("/user/emails/unread-count");
   }
 
-  // Get email by ID
   async getEmailById(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}`, {
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching email:", error);
-      throw error;
-    }
+    return apiClient.get(`/user/emails/${id}`);
   }
 
-  // Mark as read
-  async markAsRead(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/read`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to mark as read");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error marking as read:", error);
-      throw error;
-    }
-  }
-
-  // Mark as unread
-  async markAsUnread(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/unread`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to mark as unread");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error marking as unread:", error);
-      throw error;
-    }
-  }
-
-  // Star email
-  async starEmail(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/star`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to star email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error starring email:", error);
-      throw error;
-    }
-  }
-
-  // Unstar email
-  async unstarEmail(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/unstar`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to unstar email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error unstarring email:", error);
-      throw error;
-    }
-  }
-
-  // Delete email (move to trash)
-  async deleteEmail(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}`, {
-        method: "DELETE",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error deleting email:", error);
-      throw error;
-    }
-  }
-
-  // Restore email from trash
-  async restoreEmail(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/restore`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to restore email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error restoring email:", error);
-      throw error;
-    }
-  }
-
-  // Permanently delete email
-  async permanentlyDeleteEmail(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/permanent`, {
-        method: "DELETE",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to permanently delete email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error permanently deleting email:", error);
-      throw error;
-    }
-  }
-
-  // Search emails
-  async searchEmails(query, maxResults = 50) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/emails/search?q=${encodeURIComponent(
-          query
-        )}&maxResults=${maxResults}`,
-        {
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to search emails");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error searching emails:", error);
-      throw error;
-    }
-  }
-
-  // Send email
-  async sendEmail(emailData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/send`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(emailData),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error sending email:", error);
-      throw error;
-    }
-  }
-
-  // Reply to email
-  async replyToEmail(id, replyData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/reply`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(replyData),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to reply to email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error replying to email:", error);
-      throw error;
-    }
-  }
-
-  // Forward email
-  async forwardEmail(id, forwardData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/forward`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(forwardData),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to forward email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error forwarding email:", error);
-      throw error;
-    }
-  }
-
-  // Save draft
-  async saveDraft(draftData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/draft`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(draftData),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save draft");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error saving draft:", error);
-      throw error;
-    }
-  }
-
-  // Update draft
-  async updateDraft(id, draftData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/draft/${id}`, {
-        method: "PUT",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(draftData),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update draft");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error updating draft:", error);
-      throw error;
-    }
-  }
-
-  // Delete draft
-  async deleteDraft(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/draft/${id}`, {
-        method: "DELETE",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete draft");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error deleting draft:", error);
-      throw error;
-    }
-  }
-
-  // Get email attachments
-  async getAttachment(messageId, attachmentId) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/emails/${messageId}/attachments/${attachmentId}`,
-        {
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch attachment");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching attachment:", error);
-      throw error;
-    }
-  }
-
-  // Add label to email
-  async addLabel(id, labelId) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/labels`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ labelId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to add label");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error adding label:", error);
-      throw error;
-    }
-  }
-
-  // Remove label from email
-  async removeLabel(id, labelId) {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/emails/${id}/labels/${labelId}`,
-        {
-          method: "DELETE",
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to remove label");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error removing label:", error);
-      throw error;
-    }
-  }
-
-  // Get labels
-  async getLabels() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/labels`, {
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch labels");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching labels:", error);
-      throw error;
-    }
-  }
-
-  // Check Gmail connection status
-  async checkGmailStatus() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/user/gmail-status`, {
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to check Gmail status");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error checking Gmail status:", error);
-      throw error;
-    }
-  }
-
-  // Sync Gmail
-  async syncGmail() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/sync`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to sync Gmail");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error syncing Gmail:", error);
-      throw error;
-    }
-  }
-
-  // Get email thread
   async getThread(threadId) {
+    return apiClient.get(`/user/emails/thread/${threadId}`);
+  }
+
+  // ==================== EMAIL ACTIONS ====================
+
+  async markAsRead(id) {
+    return apiClient.post(`/user/emails/${id}/read`);
+  }
+
+  async markAsUnread(id) {
+    return apiClient.post(`/user/emails/${id}/unread`);
+  }
+
+  async starEmail(id) {
+    return apiClient.post(`/user/emails/${id}/star`);
+  }
+
+  async unstarEmail(id) {
+    return apiClient.post(`/user/emails/${id}/unstar`);
+  }
+
+  async deleteEmail(id) {
+    return apiClient.delete(`/user/emails/${id}`);
+  }
+
+  async restoreEmail(id) {
+    return apiClient.post(`/user/emails/${id}/restore`);
+  }
+
+  async permanentlyDeleteEmail(id) {
+    return apiClient.delete(`/user/emails/${id}/permanent`);
+  }
+
+  async archiveEmail(id) {
+    return apiClient.post(`/user/emails/${id}/archive`);
+  }
+
+  async unarchiveEmail(id) {
+    return apiClient.post(`/user/emails/${id}/unarchive`);
+  }
+
+  async markAsSpam(id) {
+    return apiClient.post(`/user/emails/${id}/spam`);
+  }
+
+  async markAsNotSpam(id) {
+    return apiClient.post(`/user/emails/${id}/not-spam`);
+  }
+
+  // ==================== SEND & COMPOSE ====================
+
+  async sendEmail(emailData, attachments = []) {
     try {
+      const formData = new FormData();
+
+      formData.append("to", emailData.to);
+      formData.append("subject", emailData.subject);
+      formData.append("body", emailData.body);
+
+      if (emailData.priority) {
+        formData.append("priority", emailData.priority);
+      }
+
+      if (emailData.link) {
+        formData.append("link", emailData.link);
+      }
+
+      if (attachments && attachments.length > 0) {
+        attachments.forEach((attachment) => {
+          formData.append("attachments", attachment.file);
+        });
+      }
+
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        throw new Error("No authentication token. Please login again.");
+      }
+
+      console.log("📧 Sending email to:", emailData.to);
+
       const response = await fetch(
-        `${API_BASE_URL}/emails/thread/${threadId}`,
+        "http://localhost:5000/api/user/emails/send",
         {
-          headers: this.getAuthHeaders(),
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
         }
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch thread");
+      console.log("📊 Response status:", response.status);
+
+      const contentType = response.headers.get("content-type");
+
+      if (contentType && contentType.includes("text/html")) {
+        throw new Error(
+          `Server error (${response.status}): Backend returned HTML. Check backend logs.`
+        );
       }
 
-      return await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw new Error("Invalid response from server");
+      }
+
+      if (!response.ok) {
+        if (data.code === "TOKEN_EXPIRED" || data.code === "INVALID_TOKEN") {
+          localStorage.removeItem("token");
+          throw new Error("Your session has expired. Redirecting to login...");
+        }
+
+        if (data.code === "GMAIL_TOKEN_EXPIRED") {
+          throw new Error(
+            "Your Gmail connection has expired. Please reconnect in Settings."
+          );
+        }
+
+        if (data.code === "MISSING_SEND_SCOPE") {
+          throw new Error(
+            "Missing Gmail send permission. Please reconnect in Settings."
+          );
+        }
+
+        throw new Error(data.message || data.error || "Failed to send email");
+      }
+
+      console.log("✅ Email sent successfully");
+      return { success: true, data };
     } catch (error) {
-      console.error("Error fetching thread:", error);
+      console.error("❌ Send email error:", error);
+
+      if (error.message.includes("session has expired")) {
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 2000);
+      }
+
       throw error;
     }
   }
 
-  // Archive email
-  async archiveEmail(id) {
+  async saveDraft(draftData, attachments = []) {
     try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/archive`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
+      const formData = new FormData();
 
-      if (!response.ok) {
-        throw new Error("Failed to archive email");
+      formData.append("to", draftData.to || "");
+      formData.append("subject", draftData.subject || "");
+      formData.append("body", draftData.body || "");
+
+      if (draftData.priority) {
+        formData.append("priority", draftData.priority);
       }
 
-      return await response.json();
+      if (draftData.link) {
+        formData.append("link", draftData.link);
+      }
+
+      if (attachments && attachments.length > 0) {
+        attachments.forEach((attachment) => {
+          formData.append("attachments", attachment.file);
+        });
+      }
+
+      const token = localStorage.getItem("token");
+
+      console.log("💾 Saving draft");
+
+      const response = await fetch(
+        "http://localhost:5000/api/user/emails/save-drafts",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.code === "MISSING_COMPOSE_SCOPE") {
+          throw new Error(
+            "Missing Gmail compose permission. Please reconnect in Settings."
+          );
+        }
+
+        throw new Error(data.message || data.error || "Failed to save draft");
+      }
+
+      console.log("✅ Draft saved successfully");
+      return { success: true, data };
     } catch (error) {
-      console.error("Error archiving email:", error);
+      console.error("❌ Save draft error:", error);
       throw error;
     }
   }
 
-  // Unarchive email
-  async unarchiveEmail(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/unarchive`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to unarchive email");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error unarchiving email:", error);
-      throw error;
-    }
+  async replyToEmail(id, replyData) {
+    return apiClient.post(`/user/emails/${id}/reply`, replyData);
   }
 
-  // Mark as spam
-  async markAsSpam(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/spam`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to mark as spam");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error marking as spam:", error);
-      throw error;
-    }
+  async forwardEmail(id, forwardData) {
+    return apiClient.post(`/user/emails/${id}/forward`, forwardData);
   }
 
-  // Mark as not spam
-  async markAsNotSpam(id) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/${id}/not-spam`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-      });
+  // ==================== DRAFTS ====================
 
-      if (!response.ok) {
-        throw new Error("Failed to mark as not spam");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error marking as not spam:", error);
-      throw error;
-    }
+  async updateDraft(id, draftData) {
+    return apiClient.put(`/user/emails/draft/${id}`, draftData);
   }
 
-  // Bulk operations
+  async deleteDraft(id) {
+    return apiClient.delete(`/user/emails/draft/${id}`);
+  }
+
+  // ==================== SEARCH & LABELS ====================
+
+  async searchEmails(query, maxResults = 50) {
+    return apiClient.get(
+      `/user/emails/search?q=${encodeURIComponent(
+        query
+      )}&maxResults=${maxResults}`
+    );
+  }
+
+  async getLabels() {
+    return apiClient.get("/user/emails/labels");
+  }
+
+  async addLabel(id, labelId) {
+    return apiClient.post(`/user/emails/${id}/labels`, { labelId });
+  }
+
+  async removeLabel(id, labelId) {
+    return apiClient.delete(`/user/emails/${id}/labels/${labelId}`);
+  }
+
+  // ==================== ATTACHMENTS ====================
+
+  async getAttachment(messageId, attachmentId) {
+    return apiClient.get(
+      `/user/emails/${messageId}/attachments/${attachmentId}`
+    );
+  }
+
+  // ==================== GMAIL SYNC ====================
+
+  async checkGmailStatus() {
+    return apiClient.get("/user/gmail-status");
+  }
+
+  async syncGmail() {
+    return apiClient.post("/user/emails/sync");
+  }
+
+  // ==================== BULK OPERATIONS ====================
+
   async bulkMarkAsRead(ids) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/bulk/read`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ ids }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to bulk mark as read");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error bulk marking as read:", error);
-      throw error;
-    }
+    return apiClient.post("/user/emails/bulk/read", { ids });
   }
 
   async bulkDelete(ids) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/bulk/delete`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ ids }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to bulk delete");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error bulk deleting:", error);
-      throw error;
-    }
+    return apiClient.post("/user/emails/bulk/delete", { ids });
   }
 
   async bulkArchive(ids) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/emails/bulk/archive`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ ids }),
-      });
+    return apiClient.post("/user/emails/bulk/archive", { ids });
+  }
 
-      if (!response.ok) {
-        throw new Error("Failed to bulk archive");
-      }
+  async bulkMarkAsUnread(ids) {
+    return apiClient.post("/user/emails/bulk/unread", { ids });
+  }
 
-      return await response.json();
-    } catch (error) {
-      console.error("Error bulk archiving:", error);
-      throw error;
-    }
+  async bulkStar(ids) {
+    return apiClient.post("/user/emails/bulk/star", { ids });
+  }
+
+  async bulkUnstar(ids) {
+    return apiClient.post("/user/emails/bulk/unstar", { ids });
+  }
+
+  async bulkAddLabel(ids, labelId) {
+    return apiClient.post("/user/emails/bulk/label", { ids, labelId });
+  }
+
+  async bulkRemoveLabel(ids, labelId) {
+    return apiClient.post("/user/emails/bulk/remove-label", { ids, labelId });
+  }
+
+  async bulkTrash(ids) {
+    return apiClient.post("/user/emails/bulk/trash", { ids });
+  }
+
+  async bulkRestore(ids) {
+    return apiClient.post("/user/emails/bulk/restore", { ids });
+  }
+
+  async bulkMarkAsSpam(ids) {
+    return apiClient.post("/user/emails/bulk/spam", { ids });
+  }
+
+  // ==================== ML CLASSIFICATION ====================
+
+  async getClassifiedInbox(maxResults = 50) {
+    return apiClient.get(`/user/emails/classify-inbox?maxResults=${maxResults}`);
+  }
+
+  async getClassificationStats(maxResults = 50) {
+    return apiClient.get(`/user/emails/classification-stats?maxResults=${maxResults}`);
+  }
+
+  async classifyEmail(id) {
+    return apiClient.get(`/user/emails/classify/${id}`);
   }
 }
 
-export default new EmailService();
+export default new MailService();

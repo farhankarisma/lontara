@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, User, Settings, Menu } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../../contexts/AuthContext";
 import Image from "next/image";
 
 export default function Header({ onMenuClick }) {

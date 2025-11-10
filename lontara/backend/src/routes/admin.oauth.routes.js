@@ -1,7 +1,10 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const { google } = require("googleapis"); // ✅ ADD THIS
 const { oauth2Client, getAuthUrl } = require("../config/googleAuth");
 const { authMiddleware, adminOnly } = require("../middlewares/auth");
+const { encrypt } = require("../utils/crypto"); // ✅ ADD THIS
+const prisma = require("../config/prisma"); // ✅ ADD THIS
 
 const router = express.Router();
 

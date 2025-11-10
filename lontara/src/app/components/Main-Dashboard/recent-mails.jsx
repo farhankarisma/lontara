@@ -17,6 +17,7 @@ const STATUS_COLORS = {
 export default function RecentMails({ onRefresh }) {
   const [mails, setMails] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [selectedMails, setSelectedMails] = useState(new Set());
 
@@ -27,8 +28,21 @@ export default function RecentMails({ onRefresh }) {
   const fetchRecentMails = async () => {
     try {
       setLoading(true);
-      const response = await emailService.getInboxEmails(5); // Get latest 5 emails
-      const emails = response.messages || [];
+      setError(null);
+
+      console.log("🔄 Fetching recent mails...");
+
+      const response = await emailService.getInboxEmails(5);
+      console.log("📥 Recent mails response:", response);
+
+      // ✅ FIX: Check success first
+      if (!response.success) {
+        throw new Error(response.error || "Failed to fetch emails");
+      }
+
+      // ✅ FIX: Access data.messages
+      const emails = response.data?.messages || [];
+      console.log("✅ Got emails:", emails.length);
 
       // Format emails for display
       const formattedMails = emails.map((email) => ({
@@ -44,7 +58,9 @@ export default function RecentMails({ onRefresh }) {
 
       setMails(formattedMails);
     } catch (error) {
-      console.error("Error fetching recent mails:", error);
+      console.error("❌ Error fetching recent mails:", error);
+      setError(error.message);
+      setMails([]); // ✅ Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -77,6 +93,8 @@ export default function RecentMails({ onRefresh }) {
 
   const handleDeleteSelected = async () => {
     try {
+      console.log("🗑️ Deleting emails:", Array.from(selectedMails));
+
       // Delete selected emails
       await Promise.all(
         Array.from(selectedMails).map((id) => emailService.deleteEmail(id))
@@ -86,15 +104,20 @@ export default function RecentMails({ onRefresh }) {
       setMails((prev) => prev.filter((mail) => !selectedMails.has(mail.id)));
       setSelectedMails(new Set());
 
+      console.log("✅ Emails deleted");
+
       // Refresh parent stats
       if (onRefresh) onRefresh();
     } catch (error) {
-      console.error("Error deleting emails:", error);
+      console.error("❌ Error deleting emails:", error);
+      alert("Failed to delete emails: " + error.message);
     }
   };
 
   const handleMarkSelectedComplete = async () => {
     try {
+      console.log("✅ Marking as complete:", Array.from(selectedMails));
+
       // Mark selected emails as read
       await Promise.all(
         Array.from(selectedMails).map((id) => emailService.markAsRead(id))
@@ -108,15 +131,20 @@ export default function RecentMails({ onRefresh }) {
       );
       setSelectedMails(new Set());
 
+      console.log("✅ Marked as complete");
+
       // Refresh parent stats
       if (onRefresh) onRefresh();
     } catch (error) {
-      console.error("Error marking emails as complete:", error);
+      console.error("❌ Error marking emails as complete:", error);
+      alert("Failed to mark emails: " + error.message);
     }
   };
 
   const handleChangeStatus = async (id, nextStatus) => {
     try {
+      console.log(`🔄 Changing status for ${id} to ${nextStatus}`);
+
       // Update status based on selection
       if (nextStatus === "Done") {
         await emailService.markAsRead(id);
@@ -130,10 +158,13 @@ export default function RecentMails({ onRefresh }) {
       );
       setOpenId(null);
 
+      console.log("✅ Status changed");
+
       // Refresh parent stats
       if (onRefresh) onRefresh();
     } catch (error) {
-      console.error("Error changing status:", error);
+      console.error("❌ Error changing status:", error);
+      alert("Failed to change status: " + error.message);
     }
   };
 
@@ -146,10 +177,31 @@ export default function RecentMails({ onRefresh }) {
     );
   }
 
+  // ✅ Add error state UI
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-red-600 mb-4">❌ {error}</p>
+        <button
+          onClick={fetchRecentMails}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   if (mails.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
         <p>No recent emails found</p>
+        <button
+          onClick={fetchRecentMails}
+          className="mt-4 text-blue-500 hover:text-blue-600 underline"
+        >
+          Refresh
+        </button>
       </div>
     );
   }
@@ -178,8 +230,12 @@ export default function RecentMails({ onRefresh }) {
               className="w-4 h-4 text-blue-500 rounded border-gray-300 flex-shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <h3 className="font-bold text-gray-800 truncate">{mail.subject}</h3>
-              <p className="text-sm text-gray-400 truncate">{mail.senderName}</p>
+              <h3 className="font-bold text-gray-800 truncate">
+                {mail.subject}
+              </h3>
+              <p className="text-sm text-gray-400 truncate">
+                {mail.senderName}
+              </p>
               {mail.snippet && (
                 <p className="text-xs text-gray-500 truncate mt-1">
                   {mail.snippet}
