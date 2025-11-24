@@ -50,12 +50,12 @@ const settings = [
     href: "/users",
     requiredRole: "ADMIN",
   },
-  {
-    name: "Settings",
-    icon: Settings,
-    href: "/settings",
-    requiredRole: null,
-  },
+  // {
+  //   name: "Settings",
+  //   icon: Settings,
+  //   href: "/settings",
+  //   requiredRole: null,
+  // },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {

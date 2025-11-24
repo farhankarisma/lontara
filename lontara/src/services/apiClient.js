@@ -15,7 +15,7 @@ class ApiClient {
     // Request interceptor - Auto inject token
     this.client.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem("authToken");
+        const token = localStorage.getItem("token");
         if (token) {
           config.headers["Authorization"] = `Bearer ${token}`;
         }
@@ -33,7 +33,7 @@ class ApiClient {
       (error) => {
         // Handle 401 Unauthorized - Auto logout
         if (error.response?.status === 401) {
-          localStorage.removeItem("authToken");
+          localStorage.removeItem("token");
           if (typeof window !== "undefined") {
             window.location.href = "/login";
           }

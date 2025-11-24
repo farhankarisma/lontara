@@ -267,7 +267,6 @@ router.get("/gmail-callback", async (req, res) => {
   }
 });
 
-// ✅ Check Gmail connection status
 router.get("/gmail-status", authMiddleware, async (req, res) => {
   try {
     const gmailConnection = await prisma.userGmail.findUnique({
@@ -293,7 +292,6 @@ router.get("/gmail-status", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ Disconnect Gmail
 router.post("/gmail-disconnect", authMiddleware, async (req, res) => {
   try {
     await prisma.userGmail.update({
